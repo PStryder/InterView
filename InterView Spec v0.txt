@@ -1,0 +1,440 @@
+SPEC-IV-0000 (v0)
+InterView — Read-Only System Viewer Surfaces for LegiVellum Meshes
+
+Status: Draft (v0)
+Class: Viewer Primitive (“Window”, not a Gate)
+Purpose: Provide bounded, read-only insight into system state and operations via query surfaces, without introducing orchestration, polling storms, or load amplification on global receipt stores.
+
+0. Core Doctrine
+
+InterView is observational only.
+It may query ledgers, caches, storage metadata, and (optionally) poll components for diagnostics.
+It MUST NOT initiate work, route work, modify artifacts, mutate system state, or trigger automation.
+
+InterView is a window. If it can change the world, it is no longer a Viewer.
+
+1. Non-Goals (Hard Prohibitions)
+
+InterView MUST NOT:
+
+submit tasks or work orders
+
+issue or revoke leases
+
+retry, reschedule, reassign, or “fix” anything
+
+ship deliverables or purge staging
+
+write receipts as part of “state changes” (logging queries is optional and MUST NOT be required)
+
+infer completion based on timeouts or heuristics
+
+perform watch/trigger behavior (“when X happens, do Y”)
+
+Note: If watch/trigger behavior is desired later, it MUST be a separate primitive class.
+
+2. Source-of-Truth Hierarchy (Load-Safety Contract)
+
+InterView MUST protect the global receipt store.
+
+InterView defines a strict source hierarchy:
+
+Projection Cache (preferred)
+InterView’s local read-optimized store, containing derived summaries and compact receipt headers.
+
+Ledger Mirror (permitted)
+A local or read-replica receipt store (not the global writer) used for bounded history queries and reconciliation.
+
+Component Diagnostics (optional, bounded)
+Read-only health/metrics snapshots from AsyncGate/DepotGate/etc. Must be rate-limited.
+
+Global Ledger (last resort, opt-in only)
+Direct query to the global receipt store is disabled by default and MUST require explicit caller intent and elevated permission.
+
+Normative rule
+
+InterView MUST NOT query the Global Ledger for routine status views.
+
+3. Naming and Surface Convention
+
+InterView surfaces use the convention:
+
+<verb>.<domain>[.<subdomain>].interview()
+
+Verb taxonomy (v0)
+
+status.*
+Derived state summaries (primarily from receipts/projections). Default low-load.
+
+search.*
+Bounded search/list queries (receipt headers, filters). Default low-load; never unbounded.
+
+get.*
+Single-object retrieval by ID (e.g., receipt by receipt_id). Bounded.
+
+health.*
+Live component polls for diagnostics (rate-limited).
+
+queue.*
+Live AsyncGate queue diagnostics (rate-limited).
+
+inventory.*
+Storage + metadata listing (pointers only; no blob body reads).
+
+4. Required Scoping
+
+All InterView calls MUST include:
+
+tenant_id
+
+And one or more identifiers depending on surface:
+
+task_id or root_task_id (most common)
+
+receipt_id
+
+deliverable_id
+
+InterView MUST enforce strict tenant isolation.
+
+5. Standard Request Controls (Cost Bounding)
+
+All list/search-like surfaces MUST support:
+
+limit (default ≤ 100)
+
+time_window or since (default time_window ≤ 24h)
+
+include_body (default false; may be unsupported in v0)
+
+freshness enum:
+
+cache_ok (default)
+
+prefer_fresh
+
+force_fresh (still must not hit global ledger unless explicitly enabled)
+
+InterView MUST cap resource usage even if a caller requests large limits.
+
+6. Standard Response Metadata
+
+Every InterView response MUST include:
+
+source enum:
+
+projection_cache
+
+ledger_mirror
+
+component_poll
+
+storage_metadata
+
+global_ledger
+
+freshness_age_ms
+
+truncated boolean
+
+next_page_token (optional, if paginated)
+
+cost_units (rough estimate acceptable, but MUST be present)
+
+7. Surfaces (v0 Required Set)
+7.1 status.receipts.interview()
+
+Purpose: Provide a low-cost derived status for a task lineage.
+
+Input (one of):
+
+task_id
+
+root_task_id
+
+Output: StatusSummary
+Minimum fields:
+
+tenant_id
+
+root_task_id
+
+state enum:
+
+unknown | accepted | in_progress | escalated | blocked | resolved | shipped
+
+latest_receipt_id (if known)
+
+last_updated_at
+
+open_obligations_count (optional)
+
+shipment_status (optional)
+
+pointers (optional):
+
+shipment_manifest_pointer
+
+artifact_pointers[] (if safe/allowed)
+
+Derivation Rules (v0, conservative):
+
+If shipment_complete exists for the deliverable/root → shipped
+
+Else if complete exists for root obligation → resolved
+
+Else if escalate exists without subsequent acceptance by new owner → escalated or blocked (implementation-defined; MUST be consistent)
+
+Else if accepted exists → in_progress (or accepted)
+
+Else → unknown
+
+Source defaults: projection_cache
+Global ledger usage: MUST NOT.
+
+7.2 search.receipts.interview()
+
+Purpose: Search/list receipt headers with strict bounds.
+
+Required input:
+
+root_task_id
+
+Optional filters:
+
+phase (accepted/complete/escalate/etc.)
+
+recipient_ai / issuer_ai (if present in schema)
+
+since or time_window
+
+limit
+
+Output:
+
+list of receipt headers (id, phase, task_id/root_task_id, timestamps, minimal routing fields)
+
+truncated + pagination token if needed
+
+Defaults:
+
+include_body=false
+
+limit<=100
+
+Source defaults: projection_cache, fallback to ledger_mirror if enabled
+Global ledger usage: opt-in only, never default.
+
+7.3 get.receipt.interview()
+
+Purpose: Retrieve a single receipt by ID (bounded).
+
+Input:
+
+receipt_id
+
+Output:
+
+full receipt object OR a redacted receipt depending on caller permissions
+
+Source defaults: projection_cache, fallback to ledger_mirror
+Global ledger usage: opt-in only.
+
+7.4 health.async.interview()
+
+Purpose: Live health snapshot of AsyncGate (diagnostic, not historical).
+
+Input:
+
+optional verbose (default false)
+
+Output:
+
+component_id
+
+reachable boolean
+
+version (optional)
+
+uptime (optional)
+
+error_budget_status (optional)
+
+metrics_snapshot (bounded; counts only)
+
+Source: component_poll
+Constraints:
+
+MUST be rate-limited (server-side)
+
+MUST have timeout (e.g., ≤ 500ms default)
+
+SHOULD be cached briefly (e.g., 1–5 seconds)
+
+7.5 queue.async.interview()
+
+Purpose: Live AsyncGate queue diagnostics (bounded).
+
+Input (optional):
+
+queue_id
+
+limit (default ≤ 20)
+
+include_examples (default false)
+
+Output:
+
+queue_depth
+
+oldest_item_age_ms
+
+active_leases_count
+
+optionally top-N headers (never full payloads by default)
+
+Source: component_poll
+Constraints: same as health (rate-limited, timeouts, caching)
+
+7.6 inventory.artifacts.depot.interview()
+
+Purpose: List artifact pointers/manifests for a task lineage or deliverable without polling DepotGate.
+
+Input (one of):
+
+root_task_id
+
+deliverable_id
+
+Output:
+
+artifact_pointers[] (pointer metadata only; no blob body)
+
+shipment_manifest_pointer (if shipped)
+
+staged_counts_by_role (optional, derived from metadata)
+
+truncated + pagination token
+
+Source: storage_metadata (metadata DB + pointer index)
+Constraints:
+
+MUST NOT read blob bodies
+
+MUST be bounded and paginated
+
+8. Optional Surfaces (v0 MAY)
+health.depot.interview()
+
+Live health snapshot of DepotGate service only (not required).
+
+status.depot.interview()
+
+Derived shipment status view from receipts/manifests (can be redundant with status.receipts).
+
+9. Global Ledger Access (Explicit Opt-In)
+
+InterView MUST implement one of the following safeguards (or both):
+
+Configuration flag: allow_global_ledger=false default
+
+Per-request flag: source="global_ledger" must be explicitly requested AND caller must have elevated permission
+
+If global ledger access is disabled or unauthorized:
+
+InterView MUST return an error with a clear reason code:
+
+GLOBAL_LEDGER_DISABLED
+
+GLOBAL_LEDGER_FORBIDDEN
+
+10. Caching and Projections (v0 Recommended)
+
+InterView SHOULD maintain a local projection store keyed by:
+
+(tenant_id, root_task_id) → latest derived status
+
+receipt headers by root_task_id and time
+
+shipment pointers and manifest pointers
+
+artifact pointer index (if DepotGate doesn’t expose one directly)
+
+Projection updates MAY be fed by:
+
+receipt tailing from a mirror
+
+event subscription
+
+periodic reconciliation jobs (bounded)
+
+InterView MUST tolerate partial knowledge and reflect it honestly (e.g., state=unknown, truncated=true, freshness_age_ms).
+
+11. Security and Redaction (v0 Required)
+
+InterView MUST:
+
+enforce tenant scoping for all queries
+
+support redaction of:
+
+artifact pointers (if external visibility is restricted)
+
+diagnostic fields (if operational metadata is sensitive)
+
+InterView SHOULD support per-surface permissions:
+
+can_view_receipts
+
+can_view_artifacts
+
+can_poll_health
+
+can_poll_queue
+
+can_force_global_ledger
+
+12. Failure Modes and Guarantees
+Guarantees
+
+InterView will not create side effects in the mesh.
+
+InterView will not hammer the global receipt store by default.
+
+InterView responses are bounded and labeled with freshness/source.
+
+Common failure modes
+
+Projection lag → stale views (communicated via freshness_age_ms)
+
+Mirror unavailable → partial responses (communicated via source and error codes)
+
+Component poll timeouts → health surfaces degrade gracefully
+
+13. Minimal v0 Compliance Checklist
+
+An implementation is InterView v0 compliant if it provides:
+
+status.receipts.interview()
+
+search.receipts.interview()
+
+get.receipt.interview()
+
+health.async.interview()
+
+queue.async.interview()
+
+inventory.artifacts.depot.interview()
+
+…with:
+
+tenant scoping
+
+bounded cost controls
+
+source/freshness metadata
+
+global ledger opt-in protection
+
+no side effects
