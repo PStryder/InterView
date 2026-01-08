@@ -175,6 +175,12 @@ class LedgerMirror:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
 
+    def _depotgate_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if self.settings.depotgate_api_key:
+            headers["Authorization"] = f"Bearer {self.settings.depotgate_api_key}"
+        return headers
+
     async def close(self) -> None:
         """Close the HTTP client."""
         if self._client:
@@ -263,6 +269,22 @@ class ComponentPoller:
             self._client = httpx.AsyncClient(timeout=timeout)
         return self._client
 
+    def _asyncgate_headers(self, tenant_id: str) -> dict[str, str]:
+        headers = {"X-Tenant-ID": tenant_id}
+        if self.settings.asyncgate_api_key:
+            headers["Authorization"] = f"Bearer {self.settings.asyncgate_api_key}"
+        return headers
+
+    def _parse_datetime(self, value: Any) -> datetime | None:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        return None
+
     async def close(self) -> None:
         """Close the HTTP client."""
         if self._client:
@@ -329,9 +351,10 @@ class ComponentPoller:
 
         client = await self._get_client()
         try:
+            headers = self._asyncgate_headers(tenant_id)
             response = await client.get(
-                f"{self.settings.asyncgate_url}/health",
-                params={"tenant_id": tenant_id, "verbose": verbose},
+                f"{self.settings.asyncgate_url}/v1/health",
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()
@@ -368,21 +391,65 @@ class ComponentPoller:
             raise DataSourceError("Rate limit exceeded for AsyncGate polls")
 
         client = await self._get_client()
+        headers = self._asyncgate_headers(tenant_id)
         params: dict[str, Any] = {
-            "tenant_id": tenant_id,
-            "limit": min(limit, 50),  # Cap at 50 per spec
-            "include_examples": include_examples,
+            "status": "queued",
+            "limit": min(limit, 50),
         }
-        if queue_id:
-            params["queue_id"] = queue_id
 
         try:
             response = await client.get(
-                f"{self.settings.asyncgate_url}/queues/diagnostics",
+                f"{self.settings.asyncgate_url}/v1/tasks",
                 params=params,
+                headers=headers,
             )
             response.raise_for_status()
-            data = response.json()
+            queued_data = response.json()
+
+            leased_response = await client.get(
+                f"{self.settings.asyncgate_url}/v1/tasks",
+                params={"status": "leased", "limit": min(limit, 50)},
+                headers=headers,
+            )
+            leased_response.raise_for_status()
+            leased_data = leased_response.json()
+
+            queued_tasks = queued_data.get("tasks", [])
+            leased_tasks = leased_data.get("tasks", [])
+
+            oldest_item_age_ms = 0
+            if queued_tasks:
+                oldest = None
+                for task in queued_tasks:
+                    created_at = self._parse_datetime(task.get("created_at"))
+                    if created_at:
+                        oldest = created_at if oldest is None else min(oldest, created_at)
+                if oldest:
+                    oldest_item_age_ms = int((datetime.utcnow() - oldest).total_seconds() * 1000)
+
+            items = []
+            if include_examples:
+                for task in queued_tasks[:limit]:
+                    created_at = self._parse_datetime(task.get("created_at"))
+                    age_ms = 0
+                    if created_at:
+                        age_ms = int((datetime.utcnow() - created_at).total_seconds() * 1000)
+                    items.append({
+                        "task_id": str(task.get("task_id")),
+                        "task_type": task.get("type", "unknown"),
+                        "status": task.get("status", "unknown"),
+                        "priority": task.get("priority", 0),
+                        "created_at": created_at,
+                        "age_ms": age_ms,
+                    })
+
+            data = {
+                "queue_depth": len(queued_tasks),
+                "active_leases_count": len(leased_tasks),
+                "oldest_item_age_ms": oldest_item_age_ms,
+                "items": items,
+            }
+
             self._set_cache(cache_key, data)
             return data, 0
         except httpx.TimeoutException:
@@ -432,31 +499,61 @@ class StorageMetadata:
             raise SourceUnavailableError("DepotGate URL not configured")
 
         client = await self._get_client()
-        params: dict[str, Any] = {
-            "tenant_id": tenant_id,
-            "limit": limit,
-        }
-        if root_task_id:
-            params["root_task_id"] = root_task_id
+        headers = self._depotgate_headers()
+        artifact_id_filter: set[str] | None = None
+        artifact_role_filter: set[str] | None = None
+
         if deliverable_id:
-            params["deliverable_id"] = deliverable_id
+            try:
+                response = await client.get(
+                    f"{self.settings.depotgate_url}/api/v1/deliverables/{deliverable_id}",
+                    headers=headers,
+                )
+                response.raise_for_status()
+                deliverable = response.json()
+                root_task_id = root_task_id or deliverable.get("root_task_id")
+                spec = deliverable.get("spec", {})
+                artifact_ids = spec.get("artifact_ids") or []
+                artifact_roles = spec.get("artifact_roles") or []
+                if artifact_ids:
+                    artifact_id_filter = {str(aid) for aid in artifact_ids}
+                if artifact_roles:
+                    artifact_role_filter = {str(role) for role in artifact_roles}
+            except httpx.HTTPError as e:
+                raise SourceUnavailableError(f"DepotGate deliverable query failed: {e}")
+
+        if not root_task_id:
+            raise SourceUnavailableError("DepotGate requires root_task_id or deliverable_id")
 
         try:
             response = await client.get(
-                f"{self.settings.depotgate_url}/artifacts/metadata",
-                params=params,
+                f"{self.settings.depotgate_url}/api/v1/stage/list",
+                params={"root_task_id": root_task_id},
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()
 
-            pointers = [ArtifactPointer(**a) for a in data.get("artifacts", [])]
-            manifest_pointer = data.get("shipment_manifest_pointer")
+            pointers = [ArtifactPointer(**a) for a in data]
+            if artifact_id_filter:
+                pointers = [p for p in pointers if p.artifact_id in artifact_id_filter]
+            if artifact_role_filter:
+                pointers = [p for p in pointers if p.artifact_role in artifact_role_filter]
+            pointers = pointers[:limit]
 
-            counts = None
-            if "staged_counts" in data:
-                counts = StagedCountsByRole(**data["staged_counts"])
+            counts = StagedCountsByRole()
+            for pointer in pointers:
+                role = (pointer.artifact_role or "").lower()
+                if role == "plan":
+                    counts.plan += 1
+                elif role == "final_output":
+                    counts.final_output += 1
+                elif role == "supporting":
+                    counts.supporting += 1
+                elif role == "intermediate":
+                    counts.intermediate += 1
 
-            return pointers, manifest_pointer, counts
+            return pointers, None, counts
         except httpx.HTTPError as e:
             raise SourceUnavailableError(f"DepotGate metadata query failed: {e}")
 

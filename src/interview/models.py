@@ -9,6 +9,22 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+# =============================================================================
+# Health & Service Models
+# =============================================================================
+
+class HealthResponse(BaseModel):
+    """Standard health check response"""
+    status: str
+    service: str = "InterView"
+    version: str
+    instance_id: str
+
+
+# =============================================================================
+# Domain Models
+# =============================================================================
+
 class Source(str, Enum):
     """Data source for InterView responses."""
     PROJECTION_CACHE = "projection_cache"

@@ -4,7 +4,7 @@ Based on SPEC-IV-0000 (v0) section 7.
 """
 
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Optional
 
 from .config import get_settings, Settings
@@ -14,6 +14,7 @@ from .models import (
     TaskState,
     ResponseMetadata,
     RequestControls,
+    HealthResponse,
     # 7.1 status.receipts.interview()
     StatusSummary,
     StatusReceiptsRequest,
@@ -50,8 +51,21 @@ from .sources import (
     GlobalLedgerDisabledError,
 )
 from .auth import verify_api_key
+from .middleware import get_rate_limiter
 
-router = APIRouter()
+
+# Rate limiting dependency
+async def rate_limit_dependency(request: Request) -> None:
+    """Rate limiting dependency."""
+    settings = get_settings()
+    limiter = get_rate_limiter(
+        calls_per_minute=settings.rate_limit_requests_per_minute,
+        enabled=settings.rate_limit_enabled
+    )
+    await limiter.check_request(request)
+
+
+router = APIRouter(dependencies=[Depends(verify_api_key), Depends(rate_limit_dependency)])
 
 # Global source manager (initialized on startup)
 _source_manager: SourceManager | None = None
@@ -78,11 +92,16 @@ async def shutdown_sources() -> None:
 # =============================================================================
 
 
-@router.get("/health", tags=["health"])
+@router.get("/health", response_model=HealthResponse, tags=["health"])
 async def health_check():
     """Health check endpoint."""
     settings = get_settings()
-    return {"status": "healthy", "version": settings.interview_version}
+    return HealthResponse(
+        status="healthy",
+        service="InterView",
+        version=settings.interview_version,
+        instance_id=settings.instance_id
+    )
 
 
 @router.get("/", tags=["root"])
