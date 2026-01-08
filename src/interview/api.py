@@ -49,6 +49,7 @@ from .sources import (
     SourceUnavailableError,
     GlobalLedgerDisabledError,
 )
+from .auth import verify_api_key
 
 router = APIRouter()
 
@@ -114,6 +115,7 @@ async def root():
     tags=["status"],
     summary="Get derived status for a task lineage",
     description="Returns a low-cost derived status summary from projection cache.",
+    dependencies=[Depends(verify_api_key)],
 )
 async def status_receipts_interview(
     request: StatusReceiptsRequest,
@@ -179,6 +181,7 @@ async def status_receipts_interview(
     tags=["search"],
     summary="Search receipt headers with strict bounds",
     description="Searches receipt headers with filters. Never returns full bodies by default.",
+    dependencies=[Depends(verify_api_key)],
 )
 async def search_receipts_interview(
     request: SearchReceiptsRequest,
@@ -254,6 +257,7 @@ async def search_receipts_interview(
     tags=["get"],
     summary="Retrieve a single receipt by ID",
     description="Retrieves a single receipt. May return redacted receipt based on permissions.",
+    dependencies=[Depends(verify_api_key)],
 )
 async def get_receipt_interview(
     request: GetReceiptRequest,
@@ -332,6 +336,7 @@ async def get_receipt_interview(
     tags=["health"],
     summary="Live health snapshot of AsyncGate",
     description="Diagnostic health snapshot. Rate-limited with timeouts and caching.",
+    dependencies=[Depends(verify_api_key)],
 )
 async def health_async_interview(
     request: HealthAsyncRequest,
@@ -395,6 +400,7 @@ async def health_async_interview(
     tags=["queue"],
     summary="Live AsyncGate queue diagnostics",
     description="Queue diagnostics with bounded item headers. Rate-limited with timeouts.",
+    dependencies=[Depends(verify_api_key)],
 )
 async def queue_async_interview(
     request: QueueAsyncRequest,
@@ -463,6 +469,7 @@ async def queue_async_interview(
     tags=["inventory"],
     summary="List artifact pointers for a task lineage",
     description="Lists artifact metadata pointers. Never reads blob bodies.",
+    dependencies=[Depends(verify_api_key)],
 )
 async def inventory_artifacts_depot_interview(
     request: InventoryArtifactsRequest,
@@ -518,6 +525,7 @@ async def inventory_artifacts_depot_interview(
     tags=["global-ledger"],
     summary="Query global ledger (opt-in only)",
     description="Direct access to global ledger. Disabled by default.",
+    dependencies=[Depends(verify_api_key)],
 )
 async def global_ledger_query(
     tenant_id: str,

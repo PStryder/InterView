@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Projection cache TTL
     projection_cache_ttl_seconds: int = 60
 
+    # Authentication
+    api_key: str = ""
+    allow_insecure_dev: bool = False
+
     model_config = {
         "env_prefix": "INTERVIEW_",
         "env_file": ".env",
