@@ -30,16 +30,18 @@ class Settings(BaseSettings):
 
     # Data sources
     projection_cache_url: str | None = Field(default=None, description="Projection cache URL")
-    ledger_mirror_url: str | None = Field(default=None, description="Ledger mirror URL")
-    asyncgate_url: str | None = Field(default=None, description="AsyncGate URL")
+    ledger_mirror_url: str | None = Field(default=None, description="Legacy ledger mirror URL")
+    receiptgate_url: str | None = Field(default=None, description="ReceiptGate MCP endpoint")
+    receiptgate_api_key: str | None = Field(default=None, description="ReceiptGate API key")
+    asyncgate_url: str | None = Field(default=None, description="AsyncGate MCP endpoint")
     asyncgate_api_key: str | None = Field(default=None, description="AsyncGate API key")
-    depotgate_url: str | None = Field(default=None, description="DepotGate URL")
+    depotgate_url: str | None = Field(default=None, description="DepotGate MCP endpoint")
     depotgate_api_key: str | None = Field(default=None, description="DepotGate API key")
-    memorygate_url: str | None = Field(default=None, description="MemoryGate URL")
+    memorygate_url: str | None = Field(default=None, description="Deprecated MemoryGate URL")
 
     # Global ledger access (section 9)
     allow_global_ledger: bool = Field(default=False, description="Allow global ledger access")
-    global_ledger_url: str | None = Field(default=None, description="Global ledger URL")
+    global_ledger_url: str | None = Field(default=None, description="Global ledger MCP endpoint")
 
     # Rate limiting for component polls (section 7.4, 7.5)
     component_poll_rate_limit_per_minute: int = Field(default=60, description="Component poll rate limit per minute")
@@ -87,7 +89,15 @@ class Settings(BaseSettings):
             raise ValueError(f"Port must be between 1 and 65535, got {v}")
         return v
 
-    @field_validator("projection_cache_url", "ledger_mirror_url", "asyncgate_url", "depotgate_url", "memorygate_url", "global_ledger_url")
+    @field_validator(
+        "projection_cache_url",
+        "ledger_mirror_url",
+        "receiptgate_url",
+        "asyncgate_url",
+        "depotgate_url",
+        "memorygate_url",
+        "global_ledger_url",
+    )
     @classmethod
     def validate_integration_url(cls, v: str | None) -> str | None:
         """Validate integration URLs are HTTP(S)."""

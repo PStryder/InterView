@@ -19,31 +19,12 @@ logger = logging.getLogger(__name__)
 API_KEY_PREFIX = "iv_"
 
 
-def verify_api_key(
-    authorization: Optional[str] = Header(None),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
-) -> bool:
-    """
-    Verify API key for protected endpoints.
-
-    Checks Authorization: Bearer or X-API-Key header against
-    the configured INTERVIEW_API_KEY environment variable.
-
-    Security: Fails closed - if api_key is not configured and we're not
-    in explicit insecure dev mode, all requests are rejected.
-    """
+def validate_api_key_value(api_key: Optional[str]) -> bool:
+    """Validate an API key string against configured settings."""
     settings = get_settings()
 
-    # Check if auth is required
     if settings.allow_insecure_dev:
         return True
-
-    # Extract API key from headers
-    api_key = None
-    if authorization and authorization.startswith("Bearer "):
-        api_key = authorization[7:]
-    elif x_api_key:
-        api_key = x_api_key
 
     if not api_key:
         raise HTTPException(
@@ -52,7 +33,6 @@ def verify_api_key(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Validate against configured API key
     if not settings.api_key:
         logger.error(
             "SECURITY VIOLATION: api_key not configured. "
@@ -63,7 +43,6 @@ def verify_api_key(
             detail="Server misconfigured: authentication not properly initialized",
         )
 
-    # Constant-time comparison to prevent timing attacks
     if not secrets.compare_digest(api_key, settings.api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -72,6 +51,20 @@ def verify_api_key(
         )
 
     return True
+
+
+def verify_api_key(
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> bool:
+    """FastAPI dependency for REST auth (deprecated)."""
+    api_key = None
+    if authorization and authorization.startswith("Bearer "):
+        api_key = authorization[7:]
+    elif x_api_key:
+        api_key = x_api_key
+
+    return validate_api_key_value(api_key)
 
 
 def generate_api_key() -> str:

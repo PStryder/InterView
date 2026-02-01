@@ -50,6 +50,59 @@ class DataSource(ABC):
         pass
 
 
+READ_ONLY_MCP_TOOLS = {
+    # ReceiptGate (read-only)
+    "receiptgate.search_receipts",
+    "receiptgate.get_receipt",
+    "receiptgate.get_receipt_chain",
+    # AsyncGate (read-only diagnostics)
+    "asyncgate.health",
+    "asyncgate.list_tasks",
+    # DepotGate (read-only metadata)
+    "depotgate.get_deliverable",
+    "list_staged_artifacts",
+}
+
+
+def _assert_read_only_tool(tool: str) -> None:
+    """Ensure MCP tool is on the read-only allowlist."""
+    if tool not in READ_ONLY_MCP_TOOLS:
+        raise DataSourceError(f"Disallowed MCP tool for InterView: {tool}")
+
+
+def _normalize_mcp_endpoint(endpoint: str) -> str:
+    normalized = endpoint.rstrip("/")
+    if not normalized.endswith("/mcp"):
+        normalized = f"{normalized}/mcp"
+    return normalized
+
+
+async def _mcp_call(
+    client: httpx.AsyncClient,
+    endpoint: str,
+    tool: str,
+    arguments: dict[str, Any],
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    _assert_read_only_tool(tool)
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "interview",
+        "method": "tools/call",
+        "params": {"name": tool, "arguments": arguments},
+    }
+    response = await client.post(
+        _normalize_mcp_endpoint(endpoint),
+        json=payload,
+        headers=headers,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if data.get("error"):
+        raise SourceUnavailableError(f"MCP error: {data['error']}")
+    return data.get("result", {})
+
+
 class ProjectionCache:
     """
     Local read-optimized store for derived summaries and compact receipt headers.
@@ -175,11 +228,14 @@ class LedgerMirror:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
 
-    def _depotgate_headers(self) -> dict[str, str]:
+    def _receiptgate_headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
-        if self.settings.depotgate_api_key:
-            headers["Authorization"] = f"Bearer {self.settings.depotgate_api_key}"
+        if self.settings.receiptgate_api_key:
+            headers["Authorization"] = f"Bearer {self.settings.receiptgate_api_key}"
         return headers
+
+    def _receiptgate_endpoint(self) -> str | None:
+        return self.settings.receiptgate_url or self.settings.ledger_mirror_url or self.settings.memorygate_url
 
     async def close(self) -> None:
         """Close the HTTP client."""
@@ -197,54 +253,58 @@ class LedgerMirror:
         limit: int = 100,
     ) -> list[ReceiptHeader]:
         """Query receipts from ledger mirror."""
-        if not self.settings.ledger_mirror_url:
-            raise SourceUnavailableError("Ledger mirror URL not configured")
+        endpoint = self._receiptgate_endpoint()
+        if not endpoint:
+            raise SourceUnavailableError("ReceiptGate endpoint not configured")
 
         client = await self._get_client()
-        params: dict[str, Any] = {
-            "tenant_id": tenant_id,
+        args: dict[str, Any] = {
             "root_task_id": root_task_id,
             "limit": limit,
         }
         if phase:
-            params["phase"] = phase
+            args["phase"] = phase
         if recipient_ai:
-            params["recipient_ai"] = recipient_ai
+            args["recipient_ai"] = recipient_ai
         if since:
-            params["since"] = since.isoformat()
+            args["since"] = since.isoformat()
 
         try:
-            response = await client.get(
-                f"{self.settings.ledger_mirror_url}/receipts/search",
-                params=params,
+            result = await _mcp_call(
+                client,
+                endpoint,
+                "receiptgate.search_receipts",
+                args,
+                headers=self._receiptgate_headers(),
             )
-            response.raise_for_status()
-            data = response.json()
-            return [ReceiptHeader(**r) for r in data.get("receipts", [])]
+            return [ReceiptHeader(**r) for r in result.get("receipts", [])]
         except httpx.HTTPError as e:
-            raise SourceUnavailableError(f"Ledger mirror query failed: {e}")
+            raise SourceUnavailableError(f"ReceiptGate query failed: {e}")
 
     async def get_receipt(
         self,
         tenant_id: str,
         receipt_id: str,
     ) -> FullReceipt | None:
-        """Get a single receipt from ledger mirror."""
-        if not self.settings.ledger_mirror_url:
-            raise SourceUnavailableError("Ledger mirror URL not configured")
+        """Get a single receipt from ReceiptGate."""
+        endpoint = self._receiptgate_endpoint()
+        if not endpoint:
+            raise SourceUnavailableError("ReceiptGate endpoint not configured")
 
         client = await self._get_client()
         try:
-            response = await client.get(
-                f"{self.settings.ledger_mirror_url}/receipts/{receipt_id}",
-                params={"tenant_id": tenant_id},
+            result = await _mcp_call(
+                client,
+                endpoint,
+                "receiptgate.get_receipt",
+                {"receipt_id": receipt_id},
+                headers=self._receiptgate_headers(),
             )
-            if response.status_code == 404:
+            if not result:
                 return None
-            response.raise_for_status()
-            return FullReceipt(**response.json())
+            return FullReceipt(**result)
         except httpx.HTTPError as e:
-            raise SourceUnavailableError(f"Ledger mirror get failed: {e}")
+            raise SourceUnavailableError(f"ReceiptGate get failed: {e}")
 
 
 class ComponentPoller:
@@ -344,7 +404,7 @@ class ComponentPoller:
             return cached
 
         if not self.settings.asyncgate_url:
-            raise SourceUnavailableError("AsyncGate URL not configured")
+            raise SourceUnavailableError("AsyncGate endpoint not configured")
 
         if not self._check_rate_limit("asyncgate"):
             raise DataSourceError("Rate limit exceeded for AsyncGate polls")
@@ -352,12 +412,13 @@ class ComponentPoller:
         client = await self._get_client()
         try:
             headers = self._asyncgate_headers(tenant_id)
-            response = await client.get(
-                f"{self.settings.asyncgate_url}/v1/health",
+            data = await _mcp_call(
+                client,
+                self.settings.asyncgate_url,
+                "asyncgate.health",
+                {},
                 headers=headers,
             )
-            response.raise_for_status()
-            data = response.json()
             self._set_cache(cache_key, data)
             return data, 0
         except httpx.TimeoutException:
@@ -385,34 +446,29 @@ class ComponentPoller:
             return cached
 
         if not self.settings.asyncgate_url:
-            raise SourceUnavailableError("AsyncGate URL not configured")
+            raise SourceUnavailableError("AsyncGate endpoint not configured")
 
         if not self._check_rate_limit("asyncgate"):
             raise DataSourceError("Rate limit exceeded for AsyncGate polls")
 
         client = await self._get_client()
         headers = self._asyncgate_headers(tenant_id)
-        params: dict[str, Any] = {
-            "status": "queued",
-            "limit": min(limit, 50),
-        }
 
         try:
-            response = await client.get(
-                f"{self.settings.asyncgate_url}/v1/tasks",
-                params=params,
+            queued_data = await _mcp_call(
+                client,
+                self.settings.asyncgate_url,
+                "asyncgate.list_tasks",
+                {"tenant_id": tenant_id, "status": "queued", "limit": min(limit, 50)},
                 headers=headers,
             )
-            response.raise_for_status()
-            queued_data = response.json()
-
-            leased_response = await client.get(
-                f"{self.settings.asyncgate_url}/v1/tasks",
-                params={"status": "leased", "limit": min(limit, 50)},
+            leased_data = await _mcp_call(
+                client,
+                self.settings.asyncgate_url,
+                "asyncgate.list_tasks",
+                {"tenant_id": tenant_id, "status": "leased", "limit": min(limit, 50)},
                 headers=headers,
             )
-            leased_response.raise_for_status()
-            leased_data = leased_response.json()
 
             queued_tasks = queued_data.get("tasks", [])
             leased_tasks = leased_data.get("tasks", [])
@@ -477,6 +533,12 @@ class StorageMetadata:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
 
+    def _depotgate_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if self.settings.depotgate_api_key:
+            headers["Authorization"] = f"Bearer {self.settings.depotgate_api_key}"
+        return headers
+
     async def close(self) -> None:
         """Close the HTTP client."""
         if self._client:
@@ -496,7 +558,7 @@ class StorageMetadata:
         Returns (pointers, shipment_manifest_pointer, staged_counts).
         """
         if not self.settings.depotgate_url:
-            raise SourceUnavailableError("DepotGate URL not configured")
+            raise SourceUnavailableError("DepotGate endpoint not configured")
 
         client = await self._get_client()
         headers = self._depotgate_headers()
@@ -505,12 +567,13 @@ class StorageMetadata:
 
         if deliverable_id:
             try:
-                response = await client.get(
-                    f"{self.settings.depotgate_url}/api/v1/deliverables/{deliverable_id}",
+                deliverable = await _mcp_call(
+                    client,
+                    self.settings.depotgate_url,
+                    "depotgate.get_deliverable",
+                    {"deliverable_id": deliverable_id},
                     headers=headers,
                 )
-                response.raise_for_status()
-                deliverable = response.json()
                 root_task_id = root_task_id or deliverable.get("root_task_id")
                 spec = deliverable.get("spec", {})
                 artifact_ids = spec.get("artifact_ids") or []
@@ -526,15 +589,27 @@ class StorageMetadata:
             raise SourceUnavailableError("DepotGate requires root_task_id or deliverable_id")
 
         try:
-            response = await client.get(
-                f"{self.settings.depotgate_url}/api/v1/stage/list",
-                params={"root_task_id": root_task_id},
+            data = await _mcp_call(
+                client,
+                self.settings.depotgate_url,
+                "list_staged_artifacts",
+                {"root_task_id": root_task_id},
                 headers=headers,
             )
-            response.raise_for_status()
-            data = response.json()
 
-            pointers = [ArtifactPointer(**a) for a in data]
+            pointers = [
+                ArtifactPointer(
+                    artifact_id=str(a.get("artifact_id")),
+                    root_task_id=root_task_id,
+                    mime_type=a.get("mime_type", "application/octet-stream"),
+                    size_bytes=a.get("size_bytes", 0),
+                    artifact_role=a.get("artifact_role", "supporting"),
+                    staged_at=a.get("staged_at"),
+                    location=a.get("location"),
+                    content_hash=a.get("content_hash"),
+                )
+                for a in data
+            ]
             if artifact_id_filter:
                 pointers = [p for p in pointers if p.artifact_id in artifact_id_filter]
             if artifact_role_filter:
@@ -591,7 +666,7 @@ class GlobalLedger:
                 "Set INTERVIEW_ALLOW_GLOBAL_LEDGER=true to enable."
             )
         if not self.settings.global_ledger_url:
-            raise SourceUnavailableError("Global ledger URL not configured")
+            raise SourceUnavailableError("Global ledger endpoint not configured")
 
     async def query_receipts(
         self,
@@ -603,20 +678,19 @@ class GlobalLedger:
         self._check_access()
 
         client = await self._get_client()
-        params = {
-            "tenant_id": tenant_id,
+        args = {
             "root_task_id": root_task_id,
             **kwargs,
         }
 
         try:
-            response = await client.get(
-                f"{self.settings.global_ledger_url}/receipts/search",
-                params=params,
+            result = await _mcp_call(
+                client,
+                self.settings.global_ledger_url,
+                "receiptgate.search_receipts",
+                args,
             )
-            response.raise_for_status()
-            data = response.json()
-            return [ReceiptHeader(**r) for r in data.get("receipts", [])]
+            return [ReceiptHeader(**r) for r in result.get("receipts", [])]
         except httpx.HTTPError as e:
             raise SourceUnavailableError(f"Global ledger query failed: {e}")
 

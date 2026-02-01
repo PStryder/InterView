@@ -27,11 +27,16 @@ Environment variables (prefix `INTERVIEW_`):
 | `DEBUG` | false | Enable debug mode |
 | `INSTANCE_ID` | interview-1 | Instance identifier |
 | `PROJECTION_CACHE_URL` | - | Projection cache URL |
-| `LEDGER_MIRROR_URL` | - | Ledger mirror URL |
-| `ASYNCGATE_URL` | - | AsyncGate URL for health/queue polls |
-| `DEPOTGATE_URL` | - | DepotGate URL for artifact metadata |
+| `LEDGER_MIRROR_URL` | - | Legacy ledger mirror URL |
+| `RECEIPTGATE_URL` | - | ReceiptGate MCP endpoint |
+| `RECEIPTGATE_API_KEY` | - | ReceiptGate API key |
+| `ASYNCGATE_URL` | - | AsyncGate MCP endpoint |
+| `ASYNCGATE_API_KEY` | - | AsyncGate API key |
+| `DEPOTGATE_URL` | - | DepotGate MCP endpoint |
+| `DEPOTGATE_API_KEY` | - | DepotGate API key |
+| `MEMORYGATE_URL` | - | Deprecated MemoryGate URL |
 | `ALLOW_GLOBAL_LEDGER` | false | Enable global ledger access |
-| `GLOBAL_LEDGER_URL` | - | Global ledger URL |
+| `GLOBAL_LEDGER_URL` | - | Global ledger MCP endpoint |
 | `COMPONENT_POLL_RATE_LIMIT_PER_MINUTE` | 60 | Rate limit for component polls |
 | `COMPONENT_POLL_TIMEOUT_MS` | 500 | Component poll timeout |
 | `COMPONENT_POLL_CACHE_SECONDS` | 5 | Component poll cache TTL |
@@ -52,6 +57,9 @@ Environment variables (prefix `INTERVIEW_`):
 
 ### Global Ledger (opt-in)
 - `POST /v1/global-ledger/receipts` - Direct global ledger query (disabled by default)
+
+### MCP HTTP (JSON-RPC)
+- `POST /mcp` - JSON-RPC endpoint supporting `tools/list` and `tools/call`
 
 ## Running
 
