@@ -1,6 +1,6 @@
-"""InterView API endpoints.
+"""InterView REST API endpoints (LEGACY, not mounted).
 
-Based on SPEC-IV-0000 (v0) section 7.
+Based on SPEC-IV-0000 (v0) section 7. MCP-only deployments should use /mcp tools.
 """
 
 from datetime import datetime, timedelta

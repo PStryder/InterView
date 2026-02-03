@@ -1,3 +1,5 @@
+> LEGACY NOTE (2026-02-03): InterView is MCP-only. REST endpoint references are historical.
+
 # InterView Code Review
 
 **Review Date:** 2026-01-08
