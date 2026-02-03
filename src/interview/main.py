@@ -10,7 +10,6 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import router as api_router, shutdown_sources as shutdown_api_sources
 from .config import get_settings
 from .mcp import router as mcp_router, shutdown_sources as shutdown_mcp_sources
 
@@ -30,7 +29,6 @@ async def lifespan(app: FastAPI):
     logger.info("InterView is observational only. A window, not a gate.")
     yield
     logger.info("InterView shutting down...")
-    await shutdown_api_sources()
     await shutdown_mcp_sources()
 
 
@@ -51,7 +49,6 @@ def create_app() -> FastAPI:
         allow_headers=settings.cors_allowed_headers,
     )
 
-    app.include_router(api_router)
     app.include_router(mcp_router)
 
     return app

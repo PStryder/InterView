@@ -41,25 +41,13 @@ Environment variables (prefix `INTERVIEW_`):
 | `COMPONENT_POLL_TIMEOUT_MS` | 500 | Component poll timeout |
 | `COMPONENT_POLL_CACHE_SECONDS` | 5 | Component poll cache TTL |
 
-## API Endpoints
+## MCP Interface
 
-### Health
-- `GET /health` - Health check
-- `GET /` - Service info
+InterView is MCP-HTTP only. Use `/mcp` with JSON-RPC methods:
+- `tools/list`
+- `tools/call`
 
-### Surfaces (v0)
-- `POST /v1/status/receipts` - status.receipts.interview()
-- `POST /v1/search/receipts` - search.receipts.interview()
-- `POST /v1/get/receipt` - get.receipt.interview()
-- `POST /v1/health/async` - health.async.interview()
-- `POST /v1/queue/async` - queue.async.interview()
-- `POST /v1/inventory/artifacts/depot` - inventory.artifacts.depot.interview()
-
-### Global Ledger (opt-in)
-- `POST /v1/global-ledger/receipts` - Direct global ledger query (disabled by default)
-
-### MCP HTTP (JSON-RPC)
-- `POST /mcp` - JSON-RPC endpoint supporting `tools/list` and `tools/call`
+All read-only surfaces (status/search/get/health/queue/inventory) are exposed as MCP tools.
 
 ## Running
 
