@@ -1,7 +1,7 @@
 """
-Authentication for InterView REST API.
+Authentication for InterView MCP HTTP requests.
 
-Simple API key authentication for protecting API endpoints.
+Simple API key authentication for protecting MCP endpoints.
 """
 
 import logging
@@ -57,7 +57,7 @@ def verify_api_key(
     authorization: Optional[str] = Header(None),
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
 ) -> bool:
-    """FastAPI dependency for REST auth (deprecated)."""
+    """FastAPI dependency for MCP auth."""
     api_key = None
     if authorization and authorization.startswith("Bearer "):
         api_key = authorization[7:]
