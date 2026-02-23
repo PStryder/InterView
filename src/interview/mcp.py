@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import BaseModel, Field
@@ -101,7 +101,8 @@ async def shutdown_sources() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    del app
     yield
     await shutdown_sources()
 
@@ -144,56 +145,71 @@ async def _handle_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         }
 
     if name == "status.receipts.interview":
-        req = StatusReceiptsRequest(**arguments)
         from .api import status_receipts_interview
-        response = await status_receipts_interview(req, sources=sources)
-        return response.model_dump()
+        return (
+            await status_receipts_interview(StatusReceiptsRequest(**arguments), sources=sources)
+        ).model_dump()
 
     if name == "search.receipts.interview":
-        req = SearchReceiptsRequest(**arguments)
         from .api import search_receipts_interview
-        response = await search_receipts_interview(req, sources=sources, settings=settings)
-        return response.model_dump()
+        return (
+            await search_receipts_interview(
+                SearchReceiptsRequest(**arguments),
+                sources=sources,
+                settings=settings,
+            )
+        ).model_dump()
 
     if name == "get.receipt.interview":
-        req = GetReceiptRequest(**arguments)
         from .api import get_receipt_interview
-        response = await get_receipt_interview(req, sources=sources)
-        return response.model_dump()
+        return (
+            await get_receipt_interview(GetReceiptRequest(**arguments), sources=sources)
+        ).model_dump()
 
     if name == "health.async.interview":
-        req = HealthAsyncRequest(**arguments)
         from .api import health_async_interview
-        response = await health_async_interview(req, sources=sources, settings=settings)
-        return response.model_dump()
+        return (
+            await health_async_interview(
+                HealthAsyncRequest(**arguments),
+                sources=sources,
+                settings=settings,
+            )
+        ).model_dump()
 
     if name == "queue.async.interview":
-        req = QueueAsyncRequest(**arguments)
         from .api import queue_async_interview
-        response = await queue_async_interview(req, sources=sources, settings=settings)
-        return response.model_dump()
+        return (
+            await queue_async_interview(
+                QueueAsyncRequest(**arguments),
+                sources=sources,
+                settings=settings,
+            )
+        ).model_dump()
 
     if name == "inventory.artifacts.depot.interview":
-        req = InventoryArtifactsRequest(**arguments)
         from .api import inventory_artifacts_depot_interview
-        response = await inventory_artifacts_depot_interview(req, sources=sources, settings=settings)
-        return response.model_dump()
+        return (
+            await inventory_artifacts_depot_interview(
+                InventoryArtifactsRequest(**arguments),
+                sources=sources,
+                settings=settings,
+            )
+        ).model_dump()
 
     if name == "global.ledger.receipts":
         from .api import global_ledger_query
-        response = await global_ledger_query(
+        return await global_ledger_query(
             tenant_id=arguments.get("tenant_id"),
             root_task_id=arguments.get("root_task_id"),
             sources=sources,
             settings=settings,
         )
-        return response
 
     raise ValueError(f"Unknown tool: {name}")
 
 
 @router.post("")
-async def mcp_entry(request_body: MCPRequest, request: Request):
+async def mcp_entry(request_body: MCPRequest, request: Request) -> dict[str, Any]:
     await _rate_limit(request)
 
     if request_body.method == "tools/list":

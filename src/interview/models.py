@@ -5,9 +5,9 @@ Based on SPEC-IV-0000 (v0).
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
-from pydantic import BaseModel, Field
+from typing import Optional
 
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # Health & Service Models
@@ -133,7 +133,7 @@ class SearchReceiptsRequest(BaseModel):
     root_task_id: str = Field(..., description="Root task ID (required)")
     phase: Optional[str] = Field(None, description="Filter by phase")
     recipient_ai: Optional[str] = Field(None, description="Filter by recipient")
-    controls: RequestControls = Field(default_factory=RequestControls)
+    controls: RequestControls = Field(default_factory=lambda: RequestControls(since=None))
 
 
 class SearchReceiptsResponse(BaseModel):
@@ -273,7 +273,7 @@ class InventoryArtifactsRequest(BaseModel):
     tenant_id: str = Field(..., description="Tenant identifier")
     root_task_id: Optional[str] = Field(None, description="Root task ID")
     deliverable_id: Optional[str] = Field(None, description="Deliverable ID")
-    controls: RequestControls = Field(default_factory=RequestControls)
+    controls: RequestControls = Field(default_factory=lambda: RequestControls(since=None))
 
 
 class ArtifactPointer(BaseModel):

@@ -4,14 +4,15 @@ InterView is observational only.
 InterView is a window. If it can change the world, it is no longer a Viewer.
 """
 
-from contextlib import asynccontextmanager
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .mcp import router as mcp_router, shutdown_sources as shutdown_mcp_sources
+from .mcp import router as mcp_router
+from .mcp import shutdown_sources as shutdown_mcp_sources
 
 settings = get_settings()
 

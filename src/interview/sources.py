@@ -3,25 +3,20 @@
 Based on SPEC-IV-0000 (v0) section 2 - Source-of-Truth Hierarchy.
 """
 
-import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
+
 import httpx
 
 from .config import get_settings
 from .models import (
-    Source,
-    Freshness,
-    ResponseMetadata,
-    StatusSummary,
-    TaskState,
-    ReceiptHeader,
-    FullReceipt,
-    MetricsSnapshot,
-    QueueItemHeader,
     ArtifactPointer,
+    FullReceipt,
+    ReceiptHeader,
+    Source,
     StagedCountsByRole,
+    StatusSummary,
 )
 
 
@@ -596,20 +591,23 @@ class StorageMetadata:
                 {"root_task_id": root_task_id},
                 headers=headers,
             )
-
-            pointers = [
-                ArtifactPointer(
-                    artifact_id=str(a.get("artifact_id")),
-                    root_task_id=root_task_id,
-                    mime_type=a.get("mime_type", "application/octet-stream"),
-                    size_bytes=a.get("size_bytes", 0),
-                    artifact_role=a.get("artifact_role", "supporting"),
-                    staged_at=a.get("staged_at"),
-                    location=a.get("location"),
-                    content_hash=a.get("content_hash"),
+            raw_items: list[dict[str, Any]] = (
+                [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+            )
+            pointers: list[ArtifactPointer] = []
+            for item in raw_items:
+                pointers.append(
+                    ArtifactPointer(
+                        artifact_id=str(item.get("artifact_id")),
+                        root_task_id=root_task_id,
+                        mime_type=item.get("mime_type", "application/octet-stream"),
+                        size_bytes=item.get("size_bytes", 0),
+                        artifact_role=item.get("artifact_role", "supporting"),
+                        staged_at=item.get("staged_at"),
+                        location=item.get("location"),
+                        content_hash=item.get("content_hash"),
+                    )
                 )
-                for a in data
-            ]
             if artifact_id_filter:
                 pointers = [p for p in pointers if p.artifact_id in artifact_id_filter]
             if artifact_role_filter:
@@ -676,6 +674,9 @@ class GlobalLedger:
     ) -> list[ReceiptHeader]:
         """Query receipts from global ledger (requires explicit opt-in)."""
         self._check_access()
+        endpoint = self.settings.global_ledger_url
+        if endpoint is None:
+            raise SourceUnavailableError("Global ledger endpoint not configured")
 
         client = await self._get_client()
         args = {
@@ -686,7 +687,7 @@ class GlobalLedger:
         try:
             result = await _mcp_call(
                 client,
-                self.settings.global_ledger_url,
+                endpoint,
                 "receiptgate.search_receipts",
                 args,
             )

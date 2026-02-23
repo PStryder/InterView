@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from .config import get_settings, Settings
+from .config import Settings, get_settings
 from .models import (
     Freshness,
     FullReceipt,
@@ -18,6 +18,7 @@ from .models import (
     QueueAsyncRequest,
     QueueAsyncResponse,
     ReceiptHeader,
+    RequestControls,
     ResponseMetadata,
     SearchReceiptsRequest,
     SearchReceiptsResponse,
@@ -53,7 +54,7 @@ def _clamp_limit(requested: int | None, settings: Settings) -> int:
     return max(1, min(requested, settings.max_limit))
 
 
-def _resolve_since(controls, settings: Settings) -> datetime | None:
+def _resolve_since(controls: RequestControls | None, settings: Settings) -> datetime | None:
     if controls is None:
         return None
 
@@ -370,7 +371,7 @@ async def queue_async_interview(
             items=data.get("items", []),
             metadata=_metadata(Source.COMPONENT_POLL, age_ms, truncated=len(data.get("items", [])) >= limit),
         )
-    except (SourceUnavailableError, DataSourceError) as exc:
+    except (SourceUnavailableError, DataSourceError):
         return QueueAsyncResponse(
             queue_depth=0,
             oldest_item_age_ms=0,

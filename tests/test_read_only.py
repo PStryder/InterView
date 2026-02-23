@@ -1,6 +1,6 @@
 import pytest
 
-from interview.sources import READ_ONLY_MCP_TOOLS, _assert_read_only_tool, DataSourceError
+from interview.sources import READ_ONLY_MCP_TOOLS, DataSourceError, _assert_read_only_tool
 
 
 def test_read_only_tool_allowlist():

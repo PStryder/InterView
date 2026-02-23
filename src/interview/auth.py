@@ -12,7 +12,6 @@ from fastapi import Header, HTTPException, status
 
 from .config import get_settings
 
-
 logger = logging.getLogger(__name__)
 
 # API key prefix for InterView

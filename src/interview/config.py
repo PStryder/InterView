@@ -4,7 +4,8 @@ Based on SPEC-IV-0000 (v0).
 """
 
 from functools import lru_cache
-from pydantic import Field, field_validator
+
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -107,7 +108,7 @@ class Settings(BaseSettings):
 
     @field_validator("api_key")
     @classmethod
-    def validate_api_key(cls, v: str, info) -> str:
+    def validate_api_key(cls, v: str, info: ValidationInfo) -> str:
         """Validate API key is set when auth is required."""
         allow_insecure = info.data.get("allow_insecure_dev", False)
         if not v and not allow_insecure:
