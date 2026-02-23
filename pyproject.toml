@@ -54,5 +54,5 @@ ignore_missing_imports = true
 pretty = true
 
 [tool.pytest.ini_options]
-addopts = "-q --maxfail=1 --cov=interview --cov-report=term-missing --cov-fail-under=20"
+addopts = "-q --maxfail=1 --cov=interview --cov-report=term-missing --cov-fail-under=40"
 testpaths = ["tests"]

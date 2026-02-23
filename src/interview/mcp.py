@@ -20,6 +20,7 @@ from .models import (
     StatusReceiptsRequest,
 )
 from .sources import SourceManager
+from .telemetry import telemetry
 
 
 class MCPRequest(BaseModel):
@@ -210,31 +211,37 @@ async def _handle_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("")
 async def mcp_entry(request_body: MCPRequest, request: Request) -> dict[str, Any]:
+    telemetry.record_request(request_body.method)
     await _rate_limit(request)
 
     if request_body.method == "tools/list":
         return _jsonrpc_result(request_body.id, {"tools": MCP_TOOLS})
 
     if request_body.method != "tools/call":
+        telemetry.record_error_code("-32601")
         return _jsonrpc_error(request_body.id, -32601, f"Method not found: {request_body.method}")
 
     params = request_body.params or {}
     tool_name = params.get("name")
     arguments = params.get("arguments") or {}
     if not tool_name:
+        telemetry.record_error_code("-32602")
         return _jsonrpc_error(request_body.id, -32602, "Missing tool name")
 
     auth_token = _extract_auth_token(arguments, request)
     try:
         validate_api_key_value(auth_token)
     except Exception as exc:
+        telemetry.record_error_code("AUTH_FAILED")
         return _jsonrpc_error(request_body.id, "AUTH_FAILED", str(exc))
 
     try:
         result = await _handle_tool(tool_name, arguments)
         return _jsonrpc_result(request_body.id, result)
     except Exception as exc:
-        return _jsonrpc_error(request_body.id, getattr(exc, "code", "ERROR"), str(exc))
+        error_code = str(getattr(exc, "code", "ERROR"))
+        telemetry.record_error_code(error_code)
+        return _jsonrpc_error(request_body.id, error_code, str(exc))
 
 
 app = FastAPI(title="InterView", version="0.1.0", lifespan=lifespan)

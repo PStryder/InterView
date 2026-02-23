@@ -84,3 +84,46 @@ def test_tools_call_health_with_bearer_auth():
     payload = response.json()
     assert payload["result"]["status"] == "healthy"
     assert payload["result"]["service"] == "InterView"
+
+
+def test_global_ledger_tool_requires_identifiers():
+    request = {
+        "jsonrpc": "2.0",
+        "id": "global-missing",
+        "method": "tools/call",
+        "params": {"name": "global.ledger.receipts", "arguments": {}},
+    }
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            json=request,
+            headers={"Authorization": "Bearer iv_test_contract_key"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_global_ledger_tool_rejected_when_disabled():
+    request = {
+        "jsonrpc": "2.0",
+        "id": "global-disabled",
+        "method": "tools/call",
+        "params": {
+            "name": "global.ledger.receipts",
+            "arguments": {"tenant_id": "tenant-a", "root_task_id": "task-a"},
+        },
+    }
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/mcp",
+            json=request,
+            headers={"Authorization": "Bearer iv_test_contract_key"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == "GLOBAL_LEDGER_DISABLED"

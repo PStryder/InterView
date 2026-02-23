@@ -1,0 +1,70 @@
+{
+  "service": "InterView",
+  "snapshot_type": "tools/list",
+  "tools": [
+    {
+      "name": "interview.health",
+      "description": "Health check / service info",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "status.receipts.interview",
+      "description": "Get derived status for a task lineage",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "search.receipts.interview",
+      "description": "Search receipt headers with strict bounds",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get.receipt.interview",
+      "description": "Retrieve a single receipt by ID",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "health.async.interview",
+      "description": "Live health snapshot of AsyncGate",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "queue.async.interview",
+      "description": "Live AsyncGate queue diagnostics",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "inventory.artifacts.depot.interview",
+      "description": "List artifact pointers for a task lineage",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "global.ledger.receipts",
+      "description": "Direct global ledger query (disabled by default)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ]
+}

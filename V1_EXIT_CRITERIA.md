@@ -19,7 +19,7 @@ Passing means:
 - No Ruff violations.
 - No MyPy errors.
 - All tests pass.
-- Coverage floor is met (`--cov-fail-under=20` from `pyproject.toml`).
+- Coverage floor is met (`--cov-fail-under=40` from `pyproject.toml`).
 
 ## Required MCP Contract Assertions
 
