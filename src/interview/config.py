@@ -5,7 +5,7 @@ Based on SPEC-IV-0000 (v0).
 
 from functools import lru_cache
 
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -106,14 +106,18 @@ class Settings(BaseSettings):
             raise ValueError(f"URL must start with http:// or https://, got {v}")
         return v
 
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v: str, info: ValidationInfo) -> str:
-        """Validate API key is set when auth is required."""
-        allow_insecure = info.data.get("allow_insecure_dev", False)
-        if not v and not allow_insecure:
+    @model_validator(mode="after")
+    def validate_api_key(self) -> "Settings":
+        """Validate API key is set when auth is required.
+
+        Checked after every field is populated: a field_validator on api_key
+        cannot see allow_insecure_dev, which is declared later and so is never
+        present in ValidationInfo.data -- the flag read as False always, and
+        INTERVIEW_ALLOW_INSECURE_DEV=true could not start the service.
+        """
+        if not self.api_key and not self.allow_insecure_dev:
             raise ValueError("api_key is required when allow_insecure_dev=False")
-        return v
+        return self
 
 
 @lru_cache
