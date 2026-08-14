@@ -124,29 +124,48 @@ def _latest_receipt(receipts: list[ReceiptHeader]) -> ReceiptHeader | None:
     )
 
 
-async def _check_shipment_state(
+async def _inspect_complete_receipts(
     receipts: list[ReceiptHeader],
     tenant_id: str,
     sources: SourceManager,
-) -> tuple[bool, str | None]:
-    """Best-effort shipment detection using full receipts (bounded)."""
+) -> tuple[bool, str | None, list[str]]:
+    """Bounded pass over complete receipts for shipment state and artifacts.
+
+    StatusSummary.artifact_pointers was never populated, so the status view
+    reported no artifacts even for tasks that produced them -- the one view
+    whose job is answering "what was produced?". The pointers are already on
+    the full receipts this function fetches, so they are collected in the same
+    bounded traversal rather than by adding a DepotGate call to a cost-bounded
+    path.
+    """
     complete_ids = [r.receipt_id for r in receipts if r.phase == "complete"][:3]
     if not complete_ids:
-        return False, None
+        return False, None, []
+
+    shipped = False
+    manifest_pointer: str | None = None
+    artifact_pointers: list[str] = []
 
     for receipt_id in complete_ids:
         try:
             payload = await sources.ledger_mirror.get_receipt(tenant_id, receipt_id)
         except (SourceUnavailableError, DataSourceError):
-            return False, None
+            # Degrade to what has been gathered so far rather than losing it.
+            break
         if not payload:
             continue
+
+        pointer = payload.artifact_pointer
+        if pointer and pointer != "NA" and pointer not in artifact_pointers:
+            artifact_pointers.append(pointer)
+
         task_type = (payload.task_type or "").lower()
         outcome_text = (payload.outcome_text or "").lower()
-        if "shipment" in task_type or "shipment" in outcome_text:
-            return True, payload.artifact_pointer
+        if not shipped and ("shipment" in task_type or "shipment" in outcome_text):
+            shipped = True
+            manifest_pointer = pointer
 
-    return False, None
+    return shipped, manifest_pointer, artifact_pointers
 
 
 async def status_receipts_interview(
@@ -179,7 +198,9 @@ async def status_receipts_interview(
     )
 
     latest = _latest_receipt(receipts)
-    shipped, manifest_pointer = await _check_shipment_state(receipts, request.tenant_id, sources)
+    shipped, manifest_pointer, artifact_pointers = await _inspect_complete_receipts(
+        receipts, request.tenant_id, sources
+    )
     state = _derive_state(receipts, shipped=shipped)
 
     status = StatusSummary(
@@ -191,6 +212,7 @@ async def status_receipts_interview(
         open_obligations_count=1 if state in (TaskState.ACCEPTED, TaskState.IN_PROGRESS) else 0,
         shipment_status="complete" if shipped else None,
         shipment_manifest_pointer=manifest_pointer,
+        artifact_pointers=artifact_pointers,
     )
 
     await sources.projection_cache.cache_status(status)
