@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     rate_limit_requests_per_minute: int = Field(default=100, description="API rate limit per minute")
 
     # Validators
+
+    # MetaGate bootstrap. Optional by design: MetaGate is a describe-only,
+    # non-blocking authority, so an unset endpoint means "use the values
+    # configured here" rather than a misconfiguration.
+    metagate_endpoint: str | None = Field(default=None, description="MetaGate MCP endpoint for bootstrap")
+    metagate_api_key: str | None = Field(default=None, description="API key for MetaGate bootstrap")
+    metagate_component_key: str = Field(default="interview", description="Component key presented at bootstrap")
+    metagate_bootstrap_timeout_seconds: float = Field(default=5.0, description="Bootstrap request timeout")
+
     @field_validator("port")
     @classmethod
     def validate_port(cls, v: int) -> int:

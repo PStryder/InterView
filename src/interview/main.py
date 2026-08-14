@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .mcp import router as mcp_router
 from .mcp import shutdown_sources as shutdown_mcp_sources
+from .metagate_client import acknowledge_startup, bootstrap_from_metagate
 
 settings = get_settings()
 
@@ -27,6 +28,13 @@ logger = logging.getLogger("interview")
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info(f"InterView v{settings.interview_version} starting...")
+    # Resolve peer endpoints from MetaGate before anything that uses them.
+    # Best-effort by design: a failure must never prevent startup, or the
+    # bootstrap authority becomes a hidden master.
+    _bootstrap = await bootstrap_from_metagate(settings)
+    if _bootstrap is not None and _bootstrap.succeeded:
+        await acknowledge_startup(settings, _bootstrap)
+
     logger.info("InterView is observational only. A window, not a gate.")
     yield
     logger.info("InterView shutting down...")
