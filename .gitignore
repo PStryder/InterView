@@ -11,3 +11,4 @@ build/
 .eggs/
 *.log
 .DS_Store
+uv.lock
