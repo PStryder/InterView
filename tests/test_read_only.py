@@ -10,7 +10,7 @@ def test_read_only_tool_allowlist():
         "asyncgate.health",
         "asyncgate.list_tasks",
         "depotgate.get_deliverable",
-        "list_staged_artifacts",
+        "depotgate.list_staged_artifacts",
     ):
         assert tool in READ_ONLY_MCP_TOOLS
         _assert_read_only_tool(tool)

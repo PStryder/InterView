@@ -55,7 +55,7 @@ READ_ONLY_MCP_TOOLS = {
     "asyncgate.list_tasks",
     # DepotGate (read-only metadata)
     "depotgate.get_deliverable",
-    "list_staged_artifacts",
+    "depotgate.list_staged_artifacts",
 }
 
 
@@ -587,7 +587,7 @@ class StorageMetadata:
             data = await _mcp_call(
                 client,
                 self.settings.depotgate_url,
-                "list_staged_artifacts",
+                "depotgate.list_staged_artifacts",
                 {"root_task_id": root_task_id},
                 headers=headers,
             )
