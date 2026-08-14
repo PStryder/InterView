@@ -42,8 +42,12 @@ jobs:
       - name: MyPy
         run: mypy src/interview
 
+      # --no-cov because pyproject applies --cov-fail-under to every pytest
+      # invocation, so this single-file contract check was also enforcing a
+      # package-wide coverage floor and failing at 39%. Coverage is gated by
+      # the full run below, where it belongs.
       - name: Validate MCP tool snapshot
-        run: pytest tests/test_mcp_snapshot.py
+        run: pytest tests/test_mcp_snapshot.py --no-cov
 
       - name: Run tests
         run: pytest
