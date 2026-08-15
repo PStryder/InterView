@@ -18,28 +18,74 @@ pip install -e ".[dev]"
 
 ## Configuration
 
-Environment variables (prefix `INTERVIEW_`):
+Environment variables (prefix `INTERVIEW_`). Generated from the `Settings`
+class; MetaGate bootstrap variables are documented in their own section below.
+
+`INTERVIEW_API_KEY` is **required** unless `INTERVIEW_ALLOW_INSECURE_DEV=true`; startup fails without it.
+
+See `.env.example` for a working starting point.
+
+### Server
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOST` | 0.0.0.0 | Server bind address |
-| `PORT` | 8000 | Server port |
-| `DEBUG` | false | Enable debug mode |
-| `INSTANCE_ID` | interview-1 | Instance identifier |
-| `PROJECTION_CACHE_URL` | - | Projection cache URL |
-| `LEDGER_MIRROR_URL` | - | Legacy ledger mirror URL |
-| `RECEIPTGATE_URL` | - | ReceiptGate MCP endpoint |
-| `RECEIPTGATE_API_KEY` | - | ReceiptGate API key |
-| `ASYNCGATE_URL` | - | AsyncGate MCP endpoint |
-| `ASYNCGATE_API_KEY` | - | AsyncGate API key |
-| `DEPOTGATE_URL` | - | DepotGate MCP endpoint |
-| `DEPOTGATE_API_KEY` | - | DepotGate API key |
-| `MEMORYGATE_URL` | - | Deprecated MemoryGate URL |
-| `ALLOW_GLOBAL_LEDGER` | false | Enable global ledger access |
-| `GLOBAL_LEDGER_URL` | - | Global ledger MCP endpoint |
-| `COMPONENT_POLL_RATE_LIMIT_PER_MINUTE` | 60 | Rate limit for component polls |
-| `COMPONENT_POLL_TIMEOUT_MS` | 500 | Component poll timeout |
-| `COMPONENT_POLL_CACHE_SECONDS` | 5 | Component poll cache TTL |
+| `INTERVIEW_DEBUG` | `false` | Enable debug mode |
+| `INTERVIEW_HOST` | `0.0.0.0` | Server bind address |
+| `INTERVIEW_INSTANCE_ID` | `interview-1` | Instance identifier |
+| `INTERVIEW_INTERVIEW_VERSION` | `0.1.0` | Service version |
+| `INTERVIEW_PORT` | `8000` | Server port |
+
+### Authentication
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INTERVIEW_ALLOW_INSECURE_DEV` | `false` | Allow unauthenticated access (dev only) |
+| `INTERVIEW_API_KEY` | *(empty)* | API key for authentication |
+
+### Upstream services
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INTERVIEW_ASYNCGATE_API_KEY` | *(unset)* | AsyncGate API key |
+| `INTERVIEW_ASYNCGATE_URL` | *(unset)* | AsyncGate MCP endpoint |
+| `INTERVIEW_DEPOTGATE_API_KEY` | *(unset)* | DepotGate API key |
+| `INTERVIEW_DEPOTGATE_URL` | *(unset)* | DepotGate MCP endpoint |
+| `INTERVIEW_GLOBAL_LEDGER_URL` | *(unset)* | Global ledger MCP endpoint |
+| `INTERVIEW_LEDGER_MIRROR_URL` | *(unset)* | Legacy ledger mirror URL |
+| `INTERVIEW_MEMORYGATE_URL` | *(unset)* | Deprecated MemoryGate URL |
+| `INTERVIEW_PROJECTION_CACHE_TTL_SECONDS` | `60` | Projection cache TTL |
+| `INTERVIEW_PROJECTION_CACHE_URL` | *(unset)* | Projection cache URL |
+| `INTERVIEW_RECEIPTGATE_API_KEY` | *(unset)* | ReceiptGate API key |
+| `INTERVIEW_RECEIPTGATE_URL` | *(unset)* | ReceiptGate MCP endpoint |
+
+### Rate limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INTERVIEW_RATE_LIMIT_ENABLED` | `true` | Enable API rate limiting |
+| `INTERVIEW_RATE_LIMIT_REQUESTS_PER_MINUTE` | `100` | API rate limit per minute |
+
+### CORS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INTERVIEW_CORS_ALLOW_CREDENTIALS` | `true` | Allow credentials in CORS requests |
+| `INTERVIEW_CORS_ALLOWED_HEADERS` | `['Authorization', 'Content-Type', 'X-Tenant-ID']` | Allowed request headers |
+| `INTERVIEW_CORS_ALLOWED_METHODS` | `['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']` | Allowed HTTP methods |
+| `INTERVIEW_CORS_ALLOWED_ORIGINS` | `['http://localhost:3000', 'http://localhost:8080']` | Allowed CORS origins |
+
+### Behaviour and limits
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INTERVIEW_ALLOW_GLOBAL_LEDGER` | `false` | Allow global ledger access |
+| `INTERVIEW_COMPONENT_POLL_CACHE_SECONDS` | `5` | Component poll cache duration |
+| `INTERVIEW_COMPONENT_POLL_RATE_LIMIT_PER_MINUTE` | `60` | Component poll rate limit per minute |
+| `INTERVIEW_COMPONENT_POLL_TIMEOUT_MS` | `500` | Component poll timeout in milliseconds |
+| `INTERVIEW_DEFAULT_LIMIT` | `100` | Default result limit |
+| `INTERVIEW_DEFAULT_TIME_WINDOW_HOURS` | `24` | Default time window in hours |
+| `INTERVIEW_MAX_LIMIT` | `200` | Maximum result limit |
+| `INTERVIEW_MAX_TIME_WINDOW_HOURS` | `168` | Maximum time window in hours (1 week) |
 
 ## MCP Interface
 
