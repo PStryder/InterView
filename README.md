@@ -91,6 +91,15 @@ InterView protects the global receipt store with a strict source hierarchy:
 <verb>.<domain>[.<subdomain>].interview()
 ```
 
+> **Open discrepancy.** The canonical `mcp.naming.md` requires service-owned
+> tools to be namespaced `interview.*`, and §6 of that document outranks this
+> README. The surface below is what the code advertises today, so it is
+> documented here as fact rather than as compliance. `global.ledger.receipts`
+> is the sharper case: it carries no service segment at all, which the naming
+> contract forbids under any convention. See §7 of `mcp.naming.md` for the two
+> ways this can be resolved — renaming (which breaks callers and the
+> `tests/test_mcp_snapshot.py` contract snapshot) or a recorded exception.
+
 ### Verb Taxonomy (v0)
 
 | Verb | Purpose |
@@ -112,6 +121,12 @@ InterView protects the global receipt store with a strict source hierarchy:
 | `health.async.interview()` | Live health snapshot of AsyncGate |
 | `queue.async.interview()` | Live AsyncGate queue diagnostics |
 | `inventory.artifacts.depot.interview()` | List artifact pointers for task/deliverable |
+| `global.ledger.receipts()` | Global ledger sweep. Last resort, opt-in only: requires explicit intent because it is the one surface not scoped to a task lineage. |
+| `interview.health()` | Health check for InterView itself |
+
+That is the full surface reported by `tools/list` — eight tools, not the six
+required by v0. `interview.health` follows the canonical namespacing; the rest
+do not, per the discrepancy noted above.
 
 ## Request Controls
 
@@ -135,6 +150,26 @@ Every response includes:
 - Will not create side effects in the mesh
 - Will not hammer the global receipt store by default
 - Responses are bounded and labeled with freshness/source
+
+## MetaGate Bootstrap
+
+On startup this gate asks MetaGate for the topology it belongs to and fills in
+endpoints the operator did not configure. It resolves: `receiptgate` → `receiptgate_url`, `asyncgate` → `asyncgate_url`, `depotgate` → `depotgate_url`.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `INTERVIEW_METAGATE_ENDPOINT` | *(unset)* | MetaGate MCP endpoint. Unset disables bootstrap; the gate starts on configured values alone. |
+| `INTERVIEW_METAGATE_API_KEY` | *(unset)* | Credential presented to MetaGate |
+| `INTERVIEW_METAGATE_COMPONENT_KEY` | `interview` | Which component in the manifest this process is |
+| `INTERVIEW_METAGATE_BOOTSTRAP_TIMEOUT_SECONDS` | `5.0` | Per-call timeout |
+
+Bootstrap never prevents startup. Every failure — unreachable, timeout, auth
+rejected, no binding, malformed packet — degrades to a logged warning and
+"carry on with configured values", because a bootstrap authority that can take
+the mesh down would be a hidden master. Explicit configuration always wins;
+bootstrap fills gaps and logs when the mesh disagrees rather than overriding.
+
+See `LegiVellum/docs/canonical/metagate.bootstrap.md` for the full contract.
 
 ## License
 
